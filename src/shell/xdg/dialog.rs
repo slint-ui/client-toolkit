@@ -39,7 +39,7 @@ impl Dialog {
         wm: &GLOBAL,
     ) -> Result<Self, GlobalError>
     where
-        D: Dispatch<wl_surface::WlSurface, SurfaceData<()>>
+        D: Dispatch<wl_surface::WlSurface, SurfaceData>
             + Dispatch<xdg_surface::XdgSurface, DialogData>
             + Dispatch<xdg_dialog_v1::XdgDialogV1, DialogData>
             + Dispatch<xdg_toplevel::XdgToplevel, DialogData>
@@ -48,15 +48,15 @@ impl Dialog {
             + ProvidesBoundGlobal<xdg_wm_base::XdgWmBase, 5>,
     {
         let surface = Surface::new(compositor, qh)?;
-        let dialog = Self::from_surface(parent, qh, surface, wm)?;
+        let dialog = Self::from_surface(surface, parent, qh, wm)?;
         dialog.wl_surface().commit();
         Ok(dialog)
     }
 
     pub fn from_surface<D, GLOBAL>(
+        surface: impl Into<Surface>,
         parent: &xdg_toplevel::XdgToplevel,
         qh: &QueueHandle<D>,
-        surface: impl Into<Surface>,
         wm_base: &GLOBAL,
     ) -> Result<Self, GlobalError>
     where
@@ -98,6 +98,10 @@ impl Dialog {
         &self.inner.surface
     }
 
+    pub fn xdg_toplevel(&self) -> &xdg_toplevel::XdgToplevel {
+        &self.inner.xdg_toplevel
+    }
+
     pub fn xdg_surface(&self) -> &xdg_surface::XdgSurface {
         self.inner.surface.xdg_surface()
     }
@@ -131,6 +135,10 @@ impl Drop for DialogInner {
         self.xdg_toplevel.destroy();
     }
 }
+
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct DialogConfigure {}
 
 impl<D> Dispatch<xdg_surface::XdgSurface, DialogData, D> for DialogData
 where

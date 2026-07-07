@@ -4,6 +4,8 @@
 use std::os::unix::io::OwnedFd;
 use std::sync::{Arc, Mutex};
 
+use wayland_protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1;
+
 use crate::reexports::client::globals::{BindError, GlobalList};
 use crate::reexports::client::Connection;
 use crate::reexports::client::{protocol::wl_surface, Dispatch, Proxy, QueueHandle};
@@ -36,6 +38,7 @@ pub mod window;
 /// The xdg shell globals.
 #[derive(Debug)]
 pub struct XdgShell {
+    xdg_wm_dialog_v1: xdg_wm_dialog_v1::XdgWmDialogV1,
     xdg_wm_base: xdg_wm_base::XdgWmBase,
     xdg_decoration_manager: GlobalProxy<zxdg_decoration_manager_v1::ZxdgDecorationManagerV1>,
 }
@@ -58,12 +61,14 @@ impl XdgShell {
     pub fn bind<State>(globals: &GlobalList, qh: &QueueHandle<State>) -> Result<Self, BindError>
     where
         State: Dispatch<xdg_wm_base::XdgWmBase, GlobalData, State>
+            + Dispatch<xdg_wm_dialog_v1::XdgWmDialogV1, GlobalData, State>
             + Dispatch<zxdg_decoration_manager_v1::ZxdgDecorationManagerV1, GlobalData, State>
             + 'static,
     {
         let xdg_wm_base = globals.bind(qh, 1..=Self::API_VERSION_MAX, GlobalData)?;
+        let xdg_wm_dialog_v1 = globals.bind(qh, 1..=1, GlobalData)?;
         let xdg_decoration_manager = GlobalProxy::from(globals.bind(qh, 1..=1, GlobalData));
-        Ok(Self { xdg_wm_base, xdg_decoration_manager })
+        Ok(Self { xdg_wm_base, xdg_wm_dialog_v1, xdg_decoration_manager })
     }
 
     /// Creates a new, unmapped window.
@@ -304,6 +309,9 @@ macro_rules! delegate_xdg_shell {
         $crate::reexports::client::delegate_dispatch!($(@< $( $lt $( : $clt $(+ $dlt )* )? ),+ >)? $ty: [
             $crate::reexports::protocols::xdg::decoration::zv1::client::zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1: $crate::shell::xdg::window::WindowData
         ] => $crate::shell::xdg::XdgShell);
+        $crate::reexports::client::delegate_dispatch!($(@< $( $lt $( : $clt $(+ $dlt )* )? ),+ >)? $ty: [
+            $crate::reexports::protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1::XdgWmDialogV1: $crate::shell::xdg::window::WindowData
+        ] => $crate::shell::xdg::XdgShell);
     };
 }
 
@@ -324,6 +332,14 @@ impl ProvidesBoundGlobal<xdg_wm_base::XdgWmBase, 5> for XdgShell {
 impl ProvidesBoundGlobal<xdg_wm_base::XdgWmBase, { XdgShell::API_VERSION_MAX }> for XdgShell {
     fn bound_global(&self) -> Result<xdg_wm_base::XdgWmBase, GlobalError> {
         Ok(self.xdg_wm_base.clone())
+    }
+}
+
+impl ProvidesBoundGlobal<xdg_wm_dialog_v1::XdgWmDialogV1, { XdgShell::API_VERSION_MAX }>
+    for XdgShell
+{
+    fn bound_global(&self) -> Result<xdg_wm_dialog_v1::XdgWmDialogV1, GlobalError> {
+        Ok(self.xdg_wm_dialog_v1.clone())
     }
 }
 
