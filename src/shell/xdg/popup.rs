@@ -2,7 +2,7 @@ use crate::{
     compositor::{Surface, SurfaceData},
     error::GlobalError,
     globals::ProvidesBoundGlobal,
-    shell::xdg::XdgShellSurface,
+    shell::{xdg::XdgShellSurface, WaylandSurface},
 };
 use std::sync::{
     atomic::{AtomicI32, AtomicU32, Ordering::Relaxed},
@@ -135,6 +135,12 @@ impl Popup {
 
     pub fn reposition(&self, position: &xdg_positioner::XdgPositioner, token: u32) {
         self.xdg_popup().reposition(position, token);
+    }
+}
+
+impl WaylandSurface for Popup {
+    fn wl_surface(&self) -> &wl_surface::WlSurface {
+        self.wl_surface()
     }
 }
 

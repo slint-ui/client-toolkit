@@ -310,7 +310,7 @@ macro_rules! delegate_xdg_shell {
             $crate::reexports::protocols::xdg::decoration::zv1::client::zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1: $crate::shell::xdg::window::WindowData
         ] => $crate::shell::xdg::XdgShell);
         $crate::reexports::client::delegate_dispatch!($(@< $( $lt $( : $clt $(+ $dlt )* )? ),+ >)? $ty: [
-            $crate::reexports::protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1::XdgWmDialogV1: $crate::shell::xdg::window::WindowData
+            $crate::reexports::protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1::XdgWmDialogV1: $crate::globals::GlobalData
         ] => $crate::shell::xdg::XdgShell);
     };
 }
@@ -335,11 +335,25 @@ impl ProvidesBoundGlobal<xdg_wm_base::XdgWmBase, { XdgShell::API_VERSION_MAX }> 
     }
 }
 
-impl ProvidesBoundGlobal<xdg_wm_dialog_v1::XdgWmDialogV1, { XdgShell::API_VERSION_MAX }>
-    for XdgShell
-{
+impl ProvidesBoundGlobal<xdg_wm_dialog_v1::XdgWmDialogV1, 1> for XdgShell {
     fn bound_global(&self) -> Result<xdg_wm_dialog_v1::XdgWmDialogV1, GlobalError> {
         Ok(self.xdg_wm_dialog_v1.clone())
+    }
+}
+
+impl<D> Dispatch<xdg_wm_dialog_v1::XdgWmDialogV1, GlobalData, D> for XdgShell
+where
+    D: Dispatch<xdg_wm_dialog_v1::XdgWmDialogV1, GlobalData>,
+{
+    fn event(
+        _: &mut D,
+        _: &xdg_wm_dialog_v1::XdgWmDialogV1,
+        _: xdg_wm_dialog_v1::Event,
+        _: &GlobalData,
+        _: &Connection,
+        _: &QueueHandle<D>,
+    ) {
+        unreachable!("xdg_wm_dialog_v1 has no events")
     }
 }
 
