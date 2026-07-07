@@ -28,6 +28,7 @@ use self::window::{
 
 use super::WaylandSurface;
 
+pub mod dialog;
 pub mod fallback_frame;
 pub mod popup;
 pub mod window;
