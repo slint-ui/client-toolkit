@@ -24,7 +24,7 @@ pub struct Dialog {
 pub struct DialogData(pub(crate) Weak<DialogInner>);
 
 #[derive(Debug)]
-struct DialogInner {
+pub(crate) struct DialogInner {
     pub surface: XdgShellSurface,
     pub xdg_toplevel: xdg_toplevel::XdgToplevel,
     pub xdg_dialog: XdgDialogV1,
@@ -39,7 +39,7 @@ impl Dialog {
         wm: &GLOBAL,
     ) -> Result<Self, GlobalError>
     where
-        D: Dispatch<wl_surface::WlSurface, SurfaceData>
+        D: Dispatch<wl_surface::WlSurface, SurfaceData<()>>
             + Dispatch<xdg_surface::XdgSurface, DialogData>
             + Dispatch<xdg_dialog_v1::XdgDialogV1, DialogData>
             + Dispatch<xdg_toplevel::XdgToplevel, DialogData>
