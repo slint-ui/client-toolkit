@@ -346,10 +346,10 @@ where
     D: Dispatch<xdg_wm_dialog_v1::XdgWmDialogV1, GlobalData>,
 {
     fn event(
+        &self,
         _: &mut D,
         _: &xdg_wm_dialog_v1::XdgWmDialogV1,
         _: xdg_wm_dialog_v1::Event,
-        _: &GlobalData,
         _: &Connection,
         _: &QueueHandle<D>,
     ) {

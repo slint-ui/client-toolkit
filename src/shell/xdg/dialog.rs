@@ -1,5 +1,6 @@
 use crate::reexports::client::{protocol::wl_compositor::WlCompositor, Proxy, QueueHandle};
 use crate::reexports::client::{protocol::wl_surface, Connection, Dispatch};
+use crate::shell::xdg::Dispatch2;
 use crate::shell::WaylandSurface;
 use crate::{
     compositor::{Surface, SurfaceData},
@@ -49,7 +50,7 @@ impl Dialog {
         wm: &GLOBAL,
     ) -> Result<Self, GlobalError>
     where
-        D: Dispatch<wl_surface::WlSurface, SurfaceData>
+        D: Dispatch<wl_surface::WlSurface, SurfaceData<()>>
             + Dispatch<xdg_surface::XdgSurface, DialogData>
             + Dispatch<xdg_dialog_v1::XdgDialogV1, DialogData>
             + Dispatch<xdg_toplevel::XdgToplevel, DialogData>
@@ -190,47 +191,26 @@ where
     }
 }
 
-impl<D> Dispatch<XdgDialogV1, DialogData, D> for DialogData
-where
-    D: Dispatch<XdgDialogV1, DialogData>,
-{
+impl<D> Dispatch2<XdgDialogV1, D> for DialogData {
     fn event(
+        &self,
         _state: &mut D,
         _proxy: &XdgDialogV1,
         _event: <XdgDialogV1 as wayland_client::Proxy>::Event,
-        _data: &DialogData,
         _conn: &Connection,
         _qhandle: &QueueHandle<D>,
     ) {
     }
 }
 
-impl<D> Dispatch<xdg_toplevel::XdgToplevel, DialogData, D> for DialogData
-where
-    D: Dispatch<xdg_toplevel::XdgToplevel, DialogData>,
-{
+impl<D> Dispatch2<xdg_toplevel::XdgToplevel, D> for DialogData {
     fn event(
+        &self,
         _state: &mut D,
         _proxy: &xdg_toplevel::XdgToplevel,
         _event: <xdg_toplevel::XdgToplevel as wayland_client::Proxy>::Event,
-        _data: &DialogData,
         _conn: &Connection,
         _qhandle: &QueueHandle<D>,
     ) {
     }
-}
-
-#[macro_export]
-macro_rules! delegate_xdg_dialog_v1 {
-    ($(@<$( $lt:tt $( : $clt:tt $(+ $dlt:tt )* )? ),+>)? $ty: ty) => {
-        $crate::reexports::client::delegate_dispatch!($(@< $( $lt $( : $clt $(+ $dlt )* )? ),+ >)? $ty: [
-            $crate::reexports::protocols::xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1: $crate::shell::xdg::dialog::DialogData
-        ] => $crate::shell::xdg::dialog::DialogData);
-        $crate::reexports::client::delegate_dispatch!($(@< $( $lt $( : $clt $(+ $dlt )* )? ),+ >)? $ty: [
-            $crate::reexports::protocols::xdg::shell::client::xdg_surface::XdgSurface: $crate::shell::xdg::dialog::DialogData
-        ] => $crate::shell::xdg::dialog::DialogData);
-        $crate::reexports::client::delegate_dispatch!($(@< $( $lt $( : $clt $(+ $dlt )* )? ),+ >)? $ty: [
-            $crate::reexports::protocols::xdg::shell::client::xdg_toplevel::XdgToplevel: $crate::shell::xdg::dialog::DialogData
-        ] => $crate::shell::xdg::dialog::DialogData);
-    };
 }
