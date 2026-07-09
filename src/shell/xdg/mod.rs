@@ -10,6 +10,7 @@ use crate::reexports::client::globals::{BindError, GlobalList};
 use crate::reexports::client::Connection;
 use crate::reexports::client::{protocol::wl_surface, Dispatch, Proxy, QueueHandle};
 use crate::reexports::csd_frame::{WindowManagerCapabilities, WindowState};
+use crate::reexports::protocols::xdg::decoration::zv1::client::zxdg_decoration_manager_v1::ZxdgDecorationManagerV1;
 use crate::reexports::protocols::xdg::decoration::zv1::client::zxdg_toplevel_decoration_v1::Mode;
 use crate::reexports::protocols::xdg::decoration::zv1::client::{
     zxdg_decoration_manager_v1, zxdg_toplevel_decoration_v1,
@@ -22,6 +23,7 @@ use crate::compositor::Surface;
 use crate::error::GlobalError;
 use crate::globals::{GlobalData, ProvidesBoundGlobal};
 use crate::registry::GlobalProxy;
+use crate::shell::xdg::dialog::DialogHandler;
 
 use self::window::inner::WindowInner;
 use self::window::{
@@ -71,6 +73,46 @@ impl XdgShell {
         Ok(Self { xdg_wm_base, xdg_wm_dialog_v1, xdg_decoration_manager })
     }
 
+    pub(crate) fn toplevel_decoration<State, D>(
+        decoration_manager: Option<&ZxdgDecorationManagerV1>,
+        xdg_toplevel: &xdg_toplevel::XdgToplevel,
+        decorations: WindowDecorations,
+        data: D,
+        qh: &QueueHandle<State>,
+    ) -> Option<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1>
+    where
+        D: Send + Sync + 'static,
+        State: Dispatch<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1, D> + 'static,
+    {
+        // If server side decorations are available, create the toplevel decoration.
+        let toplevel_decoration = decoration_manager.and_then(|decoration_manager| {
+            match decorations {
+                // Window does not want any server side decorations.
+                WindowDecorations::ClientOnly | WindowDecorations::None => None,
+
+                _ => {
+                    // Create the toplevel decoration.
+                    let toplevel_decoration =
+                        decoration_manager.get_toplevel_decoration(xdg_toplevel, qh, data);
+
+                    // Tell the compositor we would like a specific mode.
+                    let mode = match decorations {
+                        WindowDecorations::RequestServer => Some(Mode::ServerSide),
+                        WindowDecorations::RequestClient => Some(Mode::ClientSide),
+                        _ => None,
+                    };
+
+                    if let Some(mode) = mode {
+                        toplevel_decoration.set_mode(mode);
+                    }
+
+                    Some(toplevel_decoration)
+                }
+            }
+        });
+        toplevel_decoration
+    }
+
     /// Creates a new, unmapped window.
     ///
     /// # Protocol errors
@@ -114,49 +156,19 @@ impl XdgShell {
             let xdg_surface = XdgShellSurface { surface, xdg_surface };
             let xdg_toplevel = xdg_surface.xdg_surface().get_toplevel(qh, WindowData(weak.clone()));
 
-            // If server side decorations are available, create the toplevel decoration.
-            let toplevel_decoration = decoration_manager.and_then(|decoration_manager| {
-                match decorations {
-                    // Window does not want any server side decorations.
-                    WindowDecorations::ClientOnly | WindowDecorations::None => None,
-
-                    _ => {
-                        // Create the toplevel decoration.
-                        let toplevel_decoration = decoration_manager.get_toplevel_decoration(
-                            &xdg_toplevel,
-                            qh,
-                            WindowData(weak.clone()),
-                        );
-
-                        // Tell the compositor we would like a specific mode.
-                        let mode = match decorations {
-                            WindowDecorations::RequestServer => Some(Mode::ServerSide),
-                            WindowDecorations::RequestClient => Some(Mode::ClientSide),
-                            _ => None,
-                        };
-
-                        if let Some(mode) = mode {
-                            toplevel_decoration.set_mode(mode);
-                        }
-
-                        Some(toplevel_decoration)
-                    }
-                }
-            });
+            let toplevel_decoration = Self::toplevel_decoration(
+                decoration_manager,
+                &xdg_toplevel,
+                decorations,
+                WindowData(weak.clone()),
+                qh,
+            );
 
             WindowInner {
                 xdg_surface,
                 xdg_toplevel,
                 toplevel_decoration,
-                pending_configure: Mutex::new(WindowConfigure {
-                    new_size: (None, None),
-                    suggested_bounds: None,
-                    // Initial configure will indicate whether there are server side decorations.
-                    decoration_mode: DecorationMode::Client,
-                    state: WindowState::empty(),
-                    // XXX by default we assume that everything is supported.
-                    capabilities: WindowManagerCapabilities::all(),
-                }),
+                pending_configure: Mutex::new(Default::default()),
             }
         });
 
@@ -165,6 +177,9 @@ impl XdgShell {
 
         Window(inner)
     }
+
+    #[must_use = "Dropping all dialog handles will destroy the dialog"]
+    pub fn create_dialog() {}
 
     pub fn xdg_wm_base(&self) -> &xdg_wm_base::XdgWmBase {
         &self.xdg_wm_base
