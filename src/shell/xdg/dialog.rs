@@ -5,7 +5,6 @@ use crate::shell::xdg::window::inner::{
     determine_decoration_mode, determine_window_state, determine_wm_capabilities, WindowInner,
 };
 use crate::shell::xdg::window::WindowConfigure;
-use crate::shell::xdg::Dispatch2;
 use crate::shell::xdg::WindowDecorations;
 use crate::shell::WaylandSurface;
 use crate::{
@@ -78,7 +77,7 @@ impl Dialog {
         decorations: WindowDecorations,
     ) -> Result<Self, GlobalError>
     where
-        D: Dispatch<wl_surface::WlSurface, SurfaceData<()>>
+        D: Dispatch<wl_surface::WlSurface, SurfaceData>
             + Dispatch<xdg_surface::XdgSurface, DialogData>
             + Dispatch<xdg_dialog_v1::XdgDialogV1, DialogData>
             + Dispatch<xdg_toplevel::XdgToplevel, DialogData>
@@ -214,12 +213,15 @@ impl Drop for DialogInner {
     }
 }
 
-impl<D: DialogHandler> Dispatch2<xdg_surface::XdgSurface, D> for DialogData {
+impl<D: DialogHandler> Dispatch<xdg_surface::XdgSurface, DialogData, D> for DialogData
+where
+    D: Dispatch<xdg_surface::XdgSurface, DialogData> + DialogHandler,
+{
     fn event(
-        &self,
-        data: &mut D,
+        state: &mut D,
         xdg_surface: &xdg_surface::XdgSurface,
         event: <xdg_surface::XdgSurface as wayland_client::Proxy>::Event,
+        data: &DialogData,
         conn: &Connection,
         qhandle: &QueueHandle<D>,
     ) {
@@ -229,7 +231,7 @@ impl<D: DialogHandler> Dispatch2<xdg_surface::XdgSurface, D> for DialogData {
                     xdg_surface.ack_configure(serial);
 
                     let configure = dialog.inner.window.pending_configure.lock().unwrap().clone();
-                    DialogHandler::configure(data, conn, qhandle, &dialog, configure, serial)
+                    DialogHandler::configure(state, conn, qhandle, &dialog, configure, serial)
                 }
                 _ => unreachable!(),
             }
@@ -237,24 +239,30 @@ impl<D: DialogHandler> Dispatch2<xdg_surface::XdgSurface, D> for DialogData {
     }
 }
 
-impl<D> Dispatch2<XdgDialogV1, D> for DialogData {
+impl<D> Dispatch<XdgDialogV1, DialogData, D> for DialogData
+where
+    D: Dispatch<XdgDialogV1, DialogData> + DialogHandler,
+{
     fn event(
-        &self,
         _state: &mut D,
         _proxy: &XdgDialogV1,
         _event: <XdgDialogV1 as wayland_client::Proxy>::Event,
+        data: &DialogData,
         _conn: &Connection,
         _qhandle: &QueueHandle<D>,
     ) {
     }
 }
 
-impl<D: DialogHandler> Dispatch2<xdg_toplevel::XdgToplevel, D> for DialogData {
+impl<D> Dispatch<xdg_toplevel::XdgToplevel, DialogData, D> for DialogData
+where
+    D: Dispatch<xdg_toplevel::XdgToplevel, DialogData> + DialogHandler,
+{
     fn event(
-        &self,
-        data: &mut D,
+        state: &mut D,
         toplevel: &xdg_toplevel::XdgToplevel,
         event: <xdg_toplevel::XdgToplevel as wayland_client::Proxy>::Event,
+        data: &DialogData,
         conn: &Connection,
         qhandle: &QueueHandle<D>,
     ) {
@@ -276,7 +284,7 @@ impl<D: DialogHandler> Dispatch2<xdg_toplevel::XdgToplevel, D> for DialogData {
                 pending_configure.state = new_state;
             }
             xdg_toplevel::Event::Close => {
-                data.request_close(conn, qhandle, &dialog);
+                state.request_close(conn, qhandle, &dialog);
             }
 
             xdg_toplevel::Event::ConfigureBounds { width, height } => {
@@ -296,15 +304,16 @@ impl<D: DialogHandler> Dispatch2<xdg_toplevel::XdgToplevel, D> for DialogData {
     }
 }
 
-impl<D> Dispatch2<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1, D> for DialogData
+impl<D> Dispatch<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1, DialogData, D>
+    for DialogData
 where
-    D: DialogHandler,
+    D: Dispatch<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1, DialogData> + DialogHandler,
 {
     fn event(
-        &self,
         _: &mut D,
         decoration: &zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1,
         event: zxdg_toplevel_decoration_v1::Event,
+        data: &DialogData,
         _: &Connection,
         _: &QueueHandle<D>,
     ) {
@@ -326,4 +335,22 @@ where
             }
         }
     }
+}
+
+#[macro_export]
+macro_rules! delegate_xdg_dialog_v1 {
+    ($(@<$( $lt:tt $( : $clt:tt $(+ $dlt:tt )* )? ),+>)? $ty: ty) => {
+        $crate::reexports::client::delegate_dispatch!($(@< $( $lt $( : $clt $(+ $dlt )* )? ),+ >)? $ty: [
+            $crate::reexports::protocols::xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1: $crate::shell::xdg::dialog::DialogData
+        ] => $crate::shell::xdg::dialog::DialogData);
+        $crate::reexports::client::delegate_dispatch!($(@< $( $lt $( : $clt $(+ $dlt )* )? ),+ >)? $ty: [
+            $crate::reexports::protocols::xdg::shell::client::xdg_surface::XdgSurface: $crate::shell::xdg::dialog::DialogData
+        ] => $crate::shell::xdg::dialog::DialogData);
+        $crate::reexports::client::delegate_dispatch!($(@< $( $lt $( : $clt $(+ $dlt )* )? ),+ >)? $ty: [
+            $crate::reexports::protocols::xdg::shell::client::xdg_toplevel::XdgToplevel: $crate::shell::xdg::dialog::DialogData
+        ] => $crate::shell::xdg::dialog::DialogData);
+        $crate::reexports::client::delegate_dispatch!($(@< $( $lt $( : $clt $(+ $dlt )* )? ),+ >)? $ty: [
+            $crate::reexports::protocols::xdg::decoration::zv1::client::zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1: $crate::shell::xdg::dialog::DialogData
+        ] => $crate::shell::xdg::dialog::DialogData);
+    };
 }

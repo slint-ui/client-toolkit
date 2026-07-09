@@ -18,17 +18,17 @@ use crate::reexports::protocols::xdg::decoration::zv1::client::{
 use crate::reexports::protocols::xdg::shell::client::{
     xdg_positioner, xdg_surface, xdg_toplevel, xdg_wm_base,
 };
-
-use crate::compositor::Surface;
-use crate::error::GlobalError;
-use crate::globals::{GlobalData, ProvidesBoundGlobal};
-use crate::registry::GlobalProxy;
-use crate::shell::xdg::dialog::DialogHandler;
+use wayland_protocols::xdg::dialog::v1::client::xdg_dialog_v1;
 
 use self::window::inner::WindowInner;
 use self::window::{
     DecorationMode, Window, WindowConfigure, WindowData, WindowDecorations, WindowHandler,
 };
+use crate::compositor::Surface;
+use crate::error::GlobalError;
+use crate::globals::{GlobalData, ProvidesBoundGlobal};
+use crate::registry::GlobalProxy;
+use crate::shell::xdg::dialog::{Dialog, DialogData, DialogHandler};
 
 use super::WaylandSurface;
 
@@ -179,7 +179,24 @@ impl XdgShell {
     }
 
     #[must_use = "Dropping all dialog handles will destroy the dialog"]
-    pub fn create_dialog() {}
+    pub fn create_dialog<State>(
+        &self,
+        surface: impl Into<Surface>,
+        decorations: WindowDecorations,
+        qh: &QueueHandle<State>,
+        parent: &xdg_toplevel::XdgToplevel,
+    ) -> Result<Dialog, GlobalError>
+    where
+        State: Dispatch<xdg_surface::XdgSurface, DialogData>
+            + Dispatch<xdg_toplevel::XdgToplevel, DialogData>
+            + Dispatch<xdg_dialog_v1::XdgDialogV1, DialogData>
+            + Dispatch<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1, DialogData>
+            + DialogHandler
+            + 'static,
+    {
+        let decoration_manager = self.xdg_decoration_manager.get().ok();
+        Dialog::from_surface(surface, parent, qh, self, decoration_manager, decorations)
+    }
 
     pub fn xdg_wm_base(&self) -> &xdg_wm_base::XdgWmBase {
         &self.xdg_wm_base
@@ -361,10 +378,10 @@ where
     D: Dispatch<xdg_wm_dialog_v1::XdgWmDialogV1, GlobalData>,
 {
     fn event(
-        &self,
         _: &mut D,
         _: &xdg_wm_dialog_v1::XdgWmDialogV1,
         _: xdg_wm_dialog_v1::Event,
+        _data: &GlobalData,
         _: &Connection,
         _: &QueueHandle<D>,
     ) {
